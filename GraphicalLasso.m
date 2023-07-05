@@ -1,5 +1,5 @@
 % Graphical Lasso
-function [Theta,W] = GraphicalLasso(S,rho,max_iter,t)
+function [Theta,W] = GraphicalLasso(S,rho,max_iter,tol)
     %初始化
     p = size(S,1);
     W = S + rho * eye(p);
@@ -9,21 +9,24 @@ function [Theta,W] = GraphicalLasso(S,rho,max_iter,t)
     B = zeros(p,p); %存储beta
 
     %计算 eps = t*ave|S^{-diag}|
-    eps = 0.01 * sum(abs(S - diag(diag(S)))) / (p*p);
+    eps = 0.001 * norm(S - diag(diag(S)),1) / (p * (p-1));
     %iterate
     while iter < max_iter
         for j = 1:p
             iter = iter + 1;
-            V = W([1:j-1, j+1:end], [1:j-1, j+1:end]);
-            u = S([1:j-1, j+1:end], j);
-            beta = lasso(V,u,rho,max_iter,t);
-            B(:,j) = [beta(1:j-1); -1; beta(j:end)];
-            W([1:j-1, j+1:end], j) = V * beta;
-            if calculateAverageAbsoluteChange(W,W_old) < eps
+            jminus = setdiff(1:p,j);
+            V = W(jminus,jminus);
+            u = S(jminus, j);
+            beta = lasso(V,u,rho,max_iter,tol);
+            B(jminus,j) = beta;
+            W(jminus, j) = V * beta;
+            W(j,jminus) = V * beta;
+            if calculateAverageAbsoluteChange(W, W_old, p) < eps
                 break;
             end
+            W_old = W;
         end
-        if calculateAverageAbsoluteChange(W,W_old) < eps
+        if calculateAverageAbsoluteChange(W, W_old, p) < eps
             break;
         end
     end
@@ -32,44 +35,46 @@ function [Theta,W] = GraphicalLasso(S,rho,max_iter,t)
         fprintf('Max iteration reached\n');
     end
     for j = 1:p
-        Theta(j,j) = 1 / (W(j,j) - W([1:j-1, j+1:end],j)'*B([1:j-1, j+1:end],j));
-        Theta(:,j) = -Theta(j,j) * B(:,j);
+        jminus = setdiff(1:p,j);
+        Theta(j,j) = 1 / (W(j,j) - W(j,jminus)*B(jminus,j));
+        Theta(jminus,j) = -Theta(j,j) * B(jminus,j);
     end
 end
 
-function avg_abs_change = calculateAverageAbsoluteChange(matrix1, matrix2)
-    p = size(matrix1,1);
-    avg_abs_change = sum(abs(matrix1-matrix2)) / (p*p);
+function avg_abs_change = calculateAverageAbsoluteChange(matrix1, matrix2,p)
+    avg_abs_change = norm(matrix1-matrix2,1) / (p*p);
 end
 
 function soft_threshold = softThreshold(x, rho)
     soft_threshold = sign(x) * max(abs(x) - rho, 0);
 end
 
-function beta = lasso(V,u,rho,max_iter,eps)
-    max_iter = max(max_iter, 100);
+function beta = lasso(V,u,rho,max_iter,tol)
     n = size(u);
-    beta = zeros(n);
+    beta = zeros([n,1]);
     beta_old = beta;
-    iter = 0;
-    while iter < max_iter
-        for j = 1:n
-            iter = iter + 1;
+    it = 0;
+    while it < max_iter
+        for lasso_j = 1:n
+            it = it + 1;
             %calculate sum
             sum = 0;
-            for k = 1:n
-                if k ~= j
-                    sum = sum + V(j,k) * beta_old(k);
+            for lasso_k = 1:n
+                if lasso_k ~= lasso_j
+                    sum = sum + V(lasso_k,lasso_j) * beta_old(lasso_k);
                 end
             end
-            beta(j) = softThreshold(u(j) - sum, rho) / V(j,j);
+            beta(lasso_j) = softThreshold(u(lasso_j) - sum, rho) / V(lasso_j,lasso_j);
+            if norm(beta - beta_old,1) < tol
+                break;
+            end
+            beta_old = beta;
         end
-        if norm(beta - beta_old) < eps
+        if norm(beta - beta_old,1) < tol
             break;
         end
-        beta_old = beta;
     end
-    if iter == max_iter
+    if it == max_iter
         fprintf('Beta exceeded\n');
     end
 end
