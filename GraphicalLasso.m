@@ -14,13 +14,21 @@ function [Theta,W] = GraphicalLasso(S,rho,max_iter,tol)
     while iter < max_iter
         for j = 1:p
             iter = iter + 1;
+            %计算传入lasso函数的矩阵
             jminus = setdiff(1:p,j);
-            V = W(jminus,jminus);
-            u = S(jminus, j);
-            beta = lasso(V,u,rho,max_iter,tol);
-            B(jminus,j) = beta;
-            W(jminus, j) = V * beta;
-            W(j,jminus) = V * beta;
+            [V,D] = eig(W(jminus,jminus));
+            d = diag(D);
+            X = V * diag(sqrt(d)) * V'; % W_11^(1/2)
+            Y = V * diag(1./sqrt(d)) * V' * S(jminus,j);    % W_11^(-1/2) * s_12
+
+            opts = struct();
+            opts.verbose = 0;
+
+            [beta,out] = ADMM_Lasso(zeros(p-1,1),X,Y,rho,opts);
+
+            %B(jminus,j) = beta;
+            W(jminus, j) = W(jminus,jminus) * beta;
+            W(j,jminus) = W(jminus,j)';
             if calculateAverageAbsoluteChange(W, W_old, p) < eps
                 break;
             end
@@ -31,32 +39,34 @@ function [Theta,W] = GraphicalLasso(S,rho,max_iter,tol)
         end
     end
     %calculate Theta
-    if iter == max_iter
-        fprintf('Max iteration reached\n');
-    end
-    for j = 1:p
-        jminus = setdiff(1:p,j);
-        Theta(j,j) = 1 / (W(j,j) - W(j,jminus)*B(jminus,j));
-        Theta(jminus,j) = -Theta(j,j) * B(jminus,j);
-    end
+    % if iter == max_iter
+    %     fprintf('Max iteration reached\n');
+    % end
+    % for j = 1:p
+    %     %disp(W(jminus,jminus)\W(jminus,j) - B(jminus,j));
+    %     jminus = setdiff(1:p,j);
+    %     Theta(j,j) = 1 / (W(j,j) - W(j,jminus)*B(jminus,j));
+    %     Theta(jminus,j) = -Theta(j,j) * B(jminus,j);
+    % end
+    Theta = inv(W);
 end
 
 function avg_abs_change = calculateAverageAbsoluteChange(matrix1, matrix2,p)
     avg_abs_change = norm(matrix1-matrix2,1) / (p*p);
 end
 
+%传统坐标下降法（已弃用）
 function soft_threshold = softThreshold(x, rho)
     soft_threshold = sign(x) * max(abs(x) - rho, 0);
 end
-
-function beta = lasso(V,u,rho,max_iter,tol)
+function beta = lasso(V,u,rho,lasso_max_iter,tol)
     n = size(u);
     beta = zeros([n,1]);
     beta_old = beta;
-    it = 0;
-    while it < max_iter
+    lasso_it = 0;
+    while lasso_it < lasso_max_iter
         for lasso_j = 1:n
-            it = it + 1;
+            lasso_it = lasso_it + 1;
             %calculate sum
             sum = 0;
             for lasso_k = 1:n
@@ -74,7 +84,7 @@ function beta = lasso(V,u,rho,max_iter,tol)
             break;
         end
     end
-    if it == max_iter
+    if lasso_it == lasso_max_iter
         fprintf('Beta exceeded\n');
     end
 end

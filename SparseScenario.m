@@ -1,9 +1,9 @@
 % 测试GraphicalLasso函数
 % 初始参数
-p = 10; % 变量个数
+p = 500; % 变量个数
 n = 10000; % 样本个数
-max_iter = 100; % 最大迭代次数
-tol = 0.000001; % 收敛阈值
+max_iter = 1000; % 最大迭代次数
+tol = 0.0001; % 收敛阈值
 rho = 0.01; % 惩罚系数
 
 % 逆协方差矩阵
@@ -22,7 +22,5 @@ data = mvnrnd(mu,inv(inv_cov_matrix),n);
 
 S = cov(data);% 样本协方差矩阵
 [Theta, W] = GraphicalLasso(S,rho,max_iter,tol);
-[Theta1, W1] = StandardGraphicalLasso(S,rho,max_iter,tol);
-writematrix(round(inv_cov_matrix,4),'inv_cov_matrix.txt');
-writematrix(Theta,'Theta.txt');
-writematrix(Theta1,'Theta1.txt');
+%[Theta1, W1] = StandardGraphicalLasso(S,rho,max_iter,tol);
+disp(Theta);
